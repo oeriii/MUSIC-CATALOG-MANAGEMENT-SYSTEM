@@ -1,0 +1,1 @@
+here we do stack functions (pushPlayed, popPlayed, displayRecentlyPlayed) and BST functions (insertGenre, inOrderDisplay)

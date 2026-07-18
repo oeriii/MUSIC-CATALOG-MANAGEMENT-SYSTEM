@@ -185,7 +185,6 @@ int main() {
 
 
     loadFromFile(musicCatalog, saveFileName);
-    cout << "Catalog loaded successfully into Binary Search Tree.\n";
 
     // MENU LOOP GOES HERE 
     
@@ -194,8 +193,6 @@ int main() {
         saveToFile(musicCatalog, outFile);
         outFile.close();
         cout << "Catalog changes committed safely to disk.\n";
-    } else {
-        cout << "Error: Unable to open file for writing data sync." << endl;
     }
 
     clearTree(musicCatalog);

@@ -183,7 +183,6 @@ int main() {
     TreeNode* musicCatalog = nullptr;
     string saveFileName = "songs.txt";
 
-
     loadFromFile(musicCatalog, saveFileName);
 
     // MENU LOOP GOES HERE 
@@ -192,7 +191,6 @@ int main() {
     if (outFile.is_open()) {
         saveToFile(musicCatalog, outFile);
         outFile.close();
-        cout << "Catalog changes committed safely to disk.\n";
     }
 
     clearTree(musicCatalog);

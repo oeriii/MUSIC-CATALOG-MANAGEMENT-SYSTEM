@@ -1,30 +1,3 @@
-// =============================================================================
-// Double James Jukebox -- Music Catalog Management System
-// Merged from: catalog.cpp (song catalog CRUD/sort/search)
-//              tree.cpp    (play history stack + genre BST)
-//              main.cpp    (album BST + file save/load)
-//
-// NOTE: This file combines all three teammates' code into one program.
-// Each teammate's functions/classes were kept as close to original as
-// possible. The only changes made were:
-//   - Only ONE "Song" struct now exists (catalog.cpp's version, since it
-//     has all the fields everyone needs: title, artist, album, genre,
-//     year, duration). tree.cpp's Song/AlbumInfo were removed and its
-//     functions now just use this shared Song struct.
-//   - main.cpp's album "TreeNode" was renamed to "AlbumTreeNode" and
-//     tree.cpp's genre "TreeNode" was renamed to "GenreTreeNode" so the
-//     two different tree node types don't clash with each other.
-//   - Each file's own test/menu main() was removed and replaced with a
-//     single combined menu below.
-//   - Song now bundles album name + release year into a nested
-//     ReleaseInfo structure (rubric requires the primary array record
-//     to contain a nested structure), with a typedef alias on Song.
-//   - Added a manual Binary Search (by title) alongside the existing
-//     linear search, with a mandatory sort-by-title step before it runs.
-//   - The raw Song catalog[] array now has its own save/load to disk,
-//     separate from the Album tree ledger, so it actually persists.
-// =============================================================================
-
 #include <iostream>
 #include <string>
 #include <vector>
@@ -38,26 +11,16 @@
 
 using namespace std;
 
-const int MAX_SONGS = 100;   // from catalog.cpp
-const int STACK_MAX = 50;    // from tree.cpp
-const int MAX_LIMIT = 100;   // from main.cpp
+const int MAX_SONGS = 100;
+const int STACK_MAX = 50;
+const int MAX_LIMIT = 100;
 
-// =============================================================================
-// SHARED STRUCTURES
-// =============================================================================
-
-// Nested structure holding a song's release details (album + year).
-// Bundling these together lets Song demonstrate structure composition,
-// as required by the rubric ("a structure variable defined inside
-// another structure").
 struct ReleaseInfo {
     string albumName;
     int releaseYear;
 };
 
-// Song struct (from catalog.cpp) -- used everywhere now.
-// Contains a nested ReleaseInfo structure (release) to map the
-// album/year sub-attributes, instead of flat album/year fields.
+// Song struct
 struct Song {
     string title;
     string artist;
@@ -66,10 +29,9 @@ struct Song {
     int duration;
 };
 
-// Typedef alias for the primary record type, as required by the rubric.
 typedef Song SongRecord;
 
-// Album struct (from main.cpp)
+// Album struct
 struct Album {
     string albumName;
     string albumArtist;
@@ -77,7 +39,7 @@ struct Album {
     vector<Song> tracklist;
 };
 
-// Tree node for the Album BST (from main.cpp, renamed from TreeNode)
+// Tree node for the Album BST
 struct AlbumTreeNode {
     Album data;
     AlbumTreeNode* left;
@@ -90,12 +52,7 @@ string toLower(string str) {
     return str;
 }
 
-// =============================================================================
 // INPUT VALIDATION HELPERS
-// (Title/Artist are required fields. Album/Year are optional. Duration
-// must be entered as M:SS and is stored internally as total seconds.
-// Genre is chosen from a fixed list instead of free-typed text.)
-// =============================================================================
 
 const vector<string> GENRE_OPTIONS = {
     "Pop", "R&B / Soul", "Hip-Hop / Rap", "Alternative / Indie",
@@ -118,7 +75,6 @@ string promptRequiredField(const string &label) {
     }
 }
 
-// Blank input is allowed here; just returns whatever was typed (or "").
 string promptOptionalField(const string &label) {
     cout << "Enter " << label << " (optional, press Enter to skip): ";
     string value;
@@ -126,8 +82,7 @@ string promptOptionalField(const string &label) {
     return value;
 }
 
-// Optional year: blank -> 0. If the user types something, it must be
-// all digits, otherwise it's rejected and treated as skipped.
+// Optional year: blank -> 0.
 int promptOptionalYear() {
     while (true) {
         cout << "Enter Release Year (optional, press Enter to skip): ";
@@ -142,16 +97,13 @@ int promptOptionalYear() {
                 return stoi(line);
             }
             catch (...) {
-                // falls through to the retry message below
             }
         }
 
-        cout << "  -> Invalid year. Digits only, or press Enter to skip.\n";
+        cout << " Please enter a valid year (digits only) or press Enter to skip.\n";
     }
 }
 
-// Generic validated-choice prompt. Loops until the user enters a number
-// within [minVal, maxVal]. Used for the main menu and any submenu.
 int promptValidatedChoice(int minVal, int maxVal, const string &promptText) {
     string line;
     while (true) {
@@ -164,15 +116,13 @@ int promptValidatedChoice(int minVal, int maxVal, const string &promptText) {
             if (choice >= minVal && choice <= maxVal) return choice;
         }
         catch (...) {
-            // falls through to the retry message below
         }
 
-        cout << "  -> Invalid choice. Please enter a number between "
+        cout << "  Please Enter a valid Entry. Enter a number between "
              << minVal << " and " << maxVal << ".\n";
     }
 }
 
-// User picks a genre by number instead of typing it manually.
 string chooseGenre() {
     cout << "\nSelect Genre:\n";
     for (size_t i = 0; i < GENRE_OPTIONS.size(); i++) {
@@ -195,12 +145,10 @@ string chooseGenre() {
         if (choice >= 1 && choice <= (int)GENRE_OPTIONS.size()) {
             return GENRE_OPTIONS[choice - 1];
         }
-        cout << "  -> Invalid choice, try again.\n";
+        cout << "  Please Enter a valid choice.\n";
     }
 }
 
-// Parses "M:SS" into total seconds. Sets valid=false on any bad format
-// (missing colon, non-digit characters, or seconds >= 60).
 int parseDurationString(const string &input, bool &valid) {
     valid = false;
 
@@ -222,7 +170,6 @@ int parseDurationString(const string &input, bool &valid) {
     return (minutes * 60) + seconds;
 }
 
-// Keeps asking until a valid M:SS duration is entered. Returns seconds.
 int promptDuration() {
     while (true) {
         cout << "Enter Duration (format M:SS, e.g. 3:45): ";
@@ -233,11 +180,10 @@ int promptDuration() {
         int seconds = parseDurationString(line, valid);
         if (valid) return seconds;
 
-        cout << "  -> Invalid format. Use M:SS, e.g. 3:45 (seconds must be 00-59).\n";
+        cout << " Invalid format. Use M:SS, e.g. 3:45 (seconds must be 00-59).\n";
     }
 }
 
-// Converts total seconds back into "M:SS" for display, e.g. 225 -> "3:45"
 string formatDuration(int totalSeconds) {
     int minutes = totalSeconds / 60;
     int seconds = totalSeconds % 60;
@@ -246,12 +192,7 @@ string formatDuration(int totalSeconds) {
     return oss.str();
 }
 
-// =============================================================================
 // SECTION 1: CATALOG.CPP -- Song array add/display/sort/search
-// (function bodies unchanged from catalog.cpp, aside from operating on
-// the shared Song struct's nested release.albumName/release.releaseYear
-// instead of flat album/year fields)
-// =============================================================================
 
 void addSong(Song songs[], int &count);
 void displayAllSongs(Song songs[], int count);
@@ -365,10 +306,6 @@ void searchSongByTitle(Song songs[], int count) {
     }
 }
 
-// ----- NEW: manual Selection Sort by Title + manual Binary Search by Title -----
-// The rubric requires Binary Search over data that has been sorted first,
-// so this sort exists specifically to guarantee that precondition.
-
 void selectionSortByTitle(Song songs[], int count) {
     if (count <= 1) return;
 
@@ -389,9 +326,6 @@ void selectionSortByTitle(Song songs[], int count) {
     }
 }
 
-// Requires songs[0..count-1] to already be sorted ascending by title.
-// The menu handler enforces this by always sorting immediately before
-// calling this function.
 void binarySearchByTitle(Song songs[], int count) {
     if (count == 0) {
         cout << "\nCatalog is empty. Cannot search." << endl;
@@ -429,14 +363,9 @@ void binarySearchByTitle(Song songs[], int count) {
     }
 }
 
-// =============================================================================
 // SECTION 2: TREE.CPP -- Recently-played stack and Genre BST
-// (class bodies unchanged from tree.cpp, aside from:
-//   - using the shared Song struct instead of tree.cpp's own Song/AlbumInfo
-//   - TreeNode renamed to GenreTreeNode to avoid clashing with AlbumTreeNode)
-// =============================================================================
 
-// ----- Stack Component (Recently Played History) -----
+//Recently Played History stack
 class PlayedHistoryStack {
 private:
     Song history[STACK_MAX];
@@ -444,7 +373,7 @@ private:
 
 public:
     PlayedHistoryStack() {
-        topIndex = -1; // Stack starts empty
+        topIndex = -1;
     }
 
     bool isFull() {
@@ -455,7 +384,6 @@ public:
         return topIndex == -1;
     }
 
-    // Push a song onto the history stack when played
     void pushPlayed(Song playedSong) {
         if (isFull()) {
             cout << "History stack overflow! Cannot add more songs.\n";
@@ -465,11 +393,10 @@ public:
         history[topIndex] = playedSong;
     }
 
-    // Pop the last played song (Undo / Skip back)
+    //(Undo / Skip back)
     Song popPlayed() {
         if (isEmpty()) {
             cout << "History is empty!\n";
-            // Returns an empty/dummy song if nothing is there
             return Song{"", "", {"", 0}, "", 0};
         }
         Song lastPlayed = history[topIndex];
@@ -477,7 +404,6 @@ public:
         return lastPlayed;
     }
 
-    // Optional helper to display the current history stack
     void displayRecentlyPlayed() {
         if (isEmpty()) {
             cout << "No recently played songs.\n";
@@ -490,7 +416,7 @@ public:
     }
 };
 
-// ----- BST Component (Genre/Artist Hierarchy) -----
+//Genre/Artist Hierarchy
 struct GenreTreeNode {
     Song songData;
     GenreTreeNode* left;
@@ -507,35 +433,29 @@ class GenreTree {
 private:
     GenreTreeNode* root;
 
-    // Private helper for recursive insertion
     GenreTreeNode* insertHelper(GenreTreeNode* node, Song song) {
-        // If the spot is empty, create the node here
         if (node == nullptr) {
             return new GenreTreeNode(song);
         }
 
-        // Compare genres alphabetically to decide left or right branch
         if (song.genre < node->songData.genre) {
             node->left = insertHelper(node->left, song);
         } else {
-            // Equal genres can just go to the right branch
             node->right = insertHelper(node->right, song);
         }
         return node;
     }
 
-    // Private helper for recursive In-Order Traversal (A-Z)
     void inOrderHelper(GenreTreeNode* node) {
         if (node == nullptr) return;
 
         inOrderHelper(node->left);   // Visit Left
 
-        // Print the current node data
         cout << "[" << node->songData.genre << "] "
              << node->songData.title << " - "
              << node->songData.artist << "\n";
 
-        inOrderHelper(node->right);  // Visit Right
+        inOrderHelper(node->right); 
     }
 
 public:
@@ -543,12 +463,12 @@ public:
         root = nullptr;
     }
 
-    // Public function to insert a song into the tree
+    // insertgenre dito 
     void insertGenre(Song song) {
         root = insertHelper(root, song);
     }
 
-    // Public function to display the entire tree alphabetically by genre
+    // display tree alphabetically by genre
     void inOrderDisplay() {
         if (root == nullptr) {
             cout << "The genre tree is empty.\n";
@@ -559,12 +479,12 @@ public:
     }
 };
 
-// =============================================================================
-// SECTION 3: MAIN.CPP -- Album BST + File Save/Load
+
+// main stuff
 // (function bodies unchanged from main.cpp, aside from TreeNode ->
 // AlbumTreeNode rename, and Song's album/year now going through
 // song.release.albumName / song.release.releaseYear)
-// =============================================================================
+
 
 AlbumTreeNode* insertAlbum(AlbumTreeNode* node, const Album& newAlbum) {
     if (node == nullptr) {
@@ -603,8 +523,7 @@ void clearTree(AlbumTreeNode*& node) {
     node = nullptr;
 }
 
-// In-order display of the album tree (added so albums are actually
-// viewable from the menu; same traversal pattern as GenreTree above)
+// dito dinisplay ung treenode nung album
 void displayAlbumsHelper(AlbumTreeNode* node) {
     if (node == nullptr) return;
     displayAlbumsHelper(node->left);
@@ -715,14 +634,6 @@ void loadFromFile(AlbumTreeNode*& musicCatalog, const string& fileName) {
     inFile.close();
 }
 
-// ----- NEW: Catalog Array Persistence -----
-// The Album tree above already saves/loads fine, but that only covers
-// songs added through "Add Album". Songs added through "Add Song" live
-// in the raw catalog[] array and were never being saved. These two
-// functions give that array its own small ledger file so it persists
-// too, satisfying the rubric's "re-populate the program's runtime
-// memory storage array" requirement.
-
 void saveCatalogToFile(Song songs[], int count, const string& fileName) {
     ofstream outFile(fileName);
     if (!outFile.is_open()) return;
@@ -788,11 +699,6 @@ void loadCatalogFromFile(Song songs[], int& count, const string& fileName) {
     inFile.close();
 }
 
-// ----- NEW: Starter Catalog (Top 5 Songs of Quarantine) -----
-// Pre-loads the catalog with well-known 2020 quarantine-era hits so the
-// system isn't empty on first run. Only runs if the catalog is empty
-// (i.e. no save file existed yet), so it won't duplicate entries on
-// every subsequent launch.
 void seedTopQuarantineSongs(Song songs[], int &count) {
     struct SeedSong {
         string title, artist, album, genre;
@@ -823,11 +729,8 @@ void seedTopQuarantineSongs(Song songs[], int &count) {
     }
 }
 
-// ----- NEW: Starter Album (Starboy by The Weeknd) -----
-// Pre-loads the Album BST with The Weeknd's "Starboy" (2016) so there's
-// an existing album to browse/search on first run. Only inserted if the
-// album tree came back empty from loadFromFile (i.e. no songs.txt yet),
-// so it won't be re-added every time the program launches.
+//Starter Album (Starboy by The Weeknd)
+
 void seedStarboyAlbum(AlbumTreeNode*& musicCatalog) {
     Album starboy;
     starboy.albumName = "Starboy";
@@ -870,8 +773,6 @@ void seedStarboyAlbum(AlbumTreeNode*& musicCatalog) {
     musicCatalog = insertAlbum(musicCatalog, starboy);
 }
 
-// Lets the user build an Album (with its own tracklist) and insert it
-// into the Album BST. Reuses the same input style as addSong() above.
 void addAlbum(AlbumTreeNode*& musicCatalog) {
     Album newAlbum;
 
@@ -882,27 +783,50 @@ void addAlbum(AlbumTreeNode*& musicCatalog) {
     cout << "Enter Album Artist: ";
     getline(cin, newAlbum.albumArtist);
 
-    cout << "Enter Release Year: ";
-    cin >> newAlbum.releaseYear;
+    // Release year: validated via getline so bad input can't leave cin
+    // in a fail state (that was corrupting every read after it).
+    while (true) {
+        cout << "Enter Release Year: ";
+        string yearLine;
+        getline(cin, yearLine);
+        if (!yearLine.empty() && yearLine.find_first_not_of("0123456789") == string::npos) {
+            try {
+                newAlbum.releaseYear = stoi(yearLine);
+                break;
+            }
+            catch (...) {
+            }
+        }
+        cout << "  Please enter a valid year (digits only).\n";
+    }
 
-    int trackCount;
-    cout << "How many tracks on this album? ";
-    cin >> trackCount;
-    cin.ignore();
+    int trackCount = 0;
+    while (true) {
+        cout << "How many tracks on this album? ";
+        string trackLine;
+        getline(cin, trackLine);
+        try {
+            size_t idx;
+            int parsed = stoi(trackLine, &idx);
+            if (parsed > 0 && parsed <= MAX_SONGS) {
+                trackCount = parsed;
+                break;
+            }
+        }
+        catch (...) {
+        }
+        cout << "  Please enter a valid number of tracks (1-" << MAX_SONGS << ").\n";
+    }
 
     for (int i = 0; i < trackCount; i++) {
         Song s;
         cout << "\nTrack " << (i + 1) << ":\n";
-        cout << "  Title: ";
-        getline(cin, s.title);
+        s.title = promptRequiredField("  Title");
         s.artist = newAlbum.albumArtist;
         s.release.albumName = newAlbum.albumName;
-        cout << "  Genre: ";
-        getline(cin, s.genre);
+        s.genre = promptRequiredField("  Genre");
         s.release.releaseYear = newAlbum.releaseYear;
-        cout << "  Duration (seconds): ";
-        cin >> s.duration;
-        cin.ignore();
+        s.duration = promptDuration();
         newAlbum.tracklist.push_back(s);
     }
 
@@ -910,13 +834,9 @@ void addAlbum(AlbumTreeNode*& musicCatalog) {
     cout << "\nAlbum added successfully!" << endl;
 }
 
-// =============================================================================
-// COMBINED MENU  --  boot sequence, logo, and boxed layout
-// =============================================================================
 
-const int BOX_WIDTH = 57; // interior width of the menu box, between the '|' chars
 
-// Centers text inside a field of the given width (used for the logo/title).
+const int BOX_WIDTH = 57;
 string centerText(const string& text, int width) {
     if ((int)text.size() >= width) return text.substr(0, width);
     int left = (width - (int)text.size()) / 2;
@@ -924,24 +844,21 @@ string centerText(const string& text, int width) {
     return string(left, ' ') + text + string(right, ' ');
 }
 
-// Prints one line of the box: "| <padded text> |"
 void printBoxLine(const string& text) {
     cout << "|" << left << setw(BOX_WIDTH) << text << "|" << endl;
 }
 
-// Prints a divider like "+----------------------------------------+"
 void printBoxDivider(char fill = '-') {
     cout << "+" << string(BOX_WIDTH, fill) << "+" << endl;
 }
 
-// Builds "  [1] Something          [2] Something Else" padded into two columns.
 string twoCol(const string& a, const string& b) {
     ostringstream oss;
     oss << "  " << left << setw(27) << a << " " << b;
     return oss.str();
 }
 
-// ---- Fake boot sequence, shown once when the program starts ----
+//Fake boot sequence
 void loadingSequence() {
     cout << "\n";
     string steps[] = {
@@ -975,8 +892,8 @@ void loadingSequence() {
     this_thread::sleep_for(chrono::milliseconds(400));
 }
 
-// ---- ASCII logo, shown once after the boot sequence ----
-const int LOGO_WIDTH = 50; // interior width of the record-sleeve box below
+// ASCII logo
+const int LOGO_WIDTH = 50;
 
 void printLogoLine(const string& text) {
     cout << "|" << centerText(text, LOGO_WIDTH) << "|\n";
@@ -1025,10 +942,7 @@ void printMenu() {
     printBoxDivider('=');
 }
 
-// ----- NEW: Play a Song flow -----
-// Shows the available songs, plays whichever one is typed, then asks
-// whether to play another or head back to the main menu -- instead of
-// dumping the user straight back to the main menu after one play.
+//Play a Song flow
 void playSongMenu(Song catalog[], int songCount, PlayedHistoryStack &historyStack) {
     if (songCount == 0) {
         cout << "\nCatalog is empty. Add a song first." << endl;
@@ -1077,7 +991,6 @@ int main() {
     string catalogFileName = "catalog.txt";
     loadCatalogFromFile(catalog, songCount, catalogFileName);
 
-    // First-ever run (no saved catalog yet) -> load starter songs
     if (songCount == 0) {
         seedTopQuarantineSongs(catalog, songCount);
     }
@@ -1085,8 +998,6 @@ int main() {
     PlayedHistoryStack historyStack;
     GenreTree genreTree;
 
-    // Rebuild the genre tree from any songs reloaded from disk, so genre
-    // browsing reflects songs from previous sessions too.
     for (int i = 0; i < songCount; i++) {
         genreTree.insertGenre(catalog[i]);
     }
@@ -1095,7 +1006,6 @@ int main() {
     string saveFileName = "songs.txt";
     loadFromFile(musicCatalog, saveFileName);
 
-    // First-ever run (no saved albums yet) -> load starter album
     if (musicCatalog == nullptr) {
         seedStarboyAlbum(musicCatalog);
     }
@@ -1112,7 +1022,6 @@ int main() {
         switch (choice) {
             case 1: {
                 addSong(catalog, songCount);
-                // keep the genre tree in sync with the flat catalog
                 if (songCount > 0) {
                     genreTree.insertGenre(catalog[songCount - 1]);
                 }
@@ -1161,7 +1070,7 @@ int main() {
                 cout << "Saving and exiting the program. Goodbye!" << endl;
                 break;
             default:
-                cout << "Invalid choice. Please enter a number between 1 and 12." << endl;
+                cout << "Please Enter a valid entry. Select a number between 1 and 12." << endl;
         }
     } while (choice != 12);
 

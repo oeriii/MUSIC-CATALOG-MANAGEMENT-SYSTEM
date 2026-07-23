@@ -59,7 +59,7 @@ const vector<string> GENRE_OPTIONS = {
     "Electronic / Dance", "Rock", "Acoustic / Folk", "OPM", "Other"
 };
 
-// Keeps asking until the user types something that isn't blank/whitespace.
+// ask the user to type something that isn't blank or invalid
 string promptRequiredField(const string &label) {
     string value;
     while (true) {
@@ -82,7 +82,6 @@ string promptOptionalField(const string &label) {
     return value;
 }
 
-// Optional year: blank -> 0.
 int promptOptionalYear() {
     while (true) {
         cout << "Enter Release Year (optional, press Enter to skip): ";
@@ -234,17 +233,17 @@ void displayAllSongs(Song songs[], int count) {
     cout << left << setw(30) << "Title"
          << setw(25) << "Artist"
          << setw(25) << "Album"
-         << setw(15) << "Genre"
+         << setw(22) << "Genre"
          << setw(10) << "Year"
          << setw(10) << "Duration" << endl;
 
-    cout << setfill('-') << setw(115) << "-" << setfill(' ') << endl;
+    cout << setfill('-') << setw(122) << "-" << setfill(' ') << endl;
 
     for (int i = 0; i < count; i++) {
         cout << left << setw(30) << songs[i].title
              << setw(25) << songs[i].artist
              << setw(25) << songs[i].release.albumName
-             << setw(15) << songs[i].genre
+             << setw(22) << songs[i].genre
              << setw(10) << songs[i].release.releaseYear
              << setw(10) << formatDuration(songs[i].duration) << endl;
     }
@@ -332,6 +331,11 @@ void binarySearchByTitle(Song songs[], int count) {
         return;
     }
 
+    cout << "\n--- Available Songs (sorted by title) ---" << endl;
+    for (int i = 0; i < count; i++) {
+        cout << "  " << songs[i].title << " - " << songs[i].artist << endl;
+    }
+
     string searchTitle;
     cout << "\nEnter Song Title to search (Binary Search): ";
     getline(cin, searchTitle);
@@ -365,7 +369,7 @@ void binarySearchByTitle(Song songs[], int count) {
 
 // SECTION 2: TREE.CPP -- Recently-played stack and Genre BST
 
-//Recently Played History stack
+//dito noy lagay recently played stack
 class PlayedHistoryStack {
 private:
     Song history[STACK_MAX];
@@ -393,7 +397,6 @@ public:
         history[topIndex] = playedSong;
     }
 
-    //(Undo / Skip back)
     Song popPlayed() {
         if (isEmpty()) {
             cout << "History is empty!\n";
@@ -449,7 +452,7 @@ private:
     void inOrderHelper(GenreTreeNode* node) {
         if (node == nullptr) return;
 
-        inOrderHelper(node->left);   // Visit Left
+        inOrderHelper(node->left);  
 
         cout << "[" << node->songData.genre << "] "
              << node->songData.title << " - "
@@ -777,55 +780,20 @@ void addAlbum(AlbumTreeNode*& musicCatalog) {
     Album newAlbum;
 
     cout << "\n--- Add a New Album ---" << endl;
-    cout << "Enter Album Name: ";
-    getline(cin, newAlbum.albumName);
+    newAlbum.albumName = promptRequiredField("Album Name");
+    newAlbum.albumArtist = promptRequiredField("Album Artist");
+    newAlbum.releaseYear = promptOptionalYear();
 
-    cout << "Enter Album Artist: ";
-    getline(cin, newAlbum.albumArtist);
-
-    // Release year: validated via getline so bad input can't leave cin
-    // in a fail state (that was corrupting every read after it).
-    while (true) {
-        cout << "Enter Release Year: ";
-        string yearLine;
-        getline(cin, yearLine);
-        if (!yearLine.empty() && yearLine.find_first_not_of("0123456789") == string::npos) {
-            try {
-                newAlbum.releaseYear = stoi(yearLine);
-                break;
-            }
-            catch (...) {
-            }
-        }
-        cout << "  Please enter a valid year (digits only).\n";
-    }
-
-    int trackCount = 0;
-    while (true) {
-        cout << "How many tracks on this album? ";
-        string trackLine;
-        getline(cin, trackLine);
-        try {
-            size_t idx;
-            int parsed = stoi(trackLine, &idx);
-            if (parsed > 0 && parsed <= MAX_SONGS) {
-                trackCount = parsed;
-                break;
-            }
-        }
-        catch (...) {
-        }
-        cout << "  Please enter a valid number of tracks (1-" << MAX_SONGS << ").\n";
-    }
+    int trackCount = promptValidatedChoice(1, 50, "How many tracks on this album? (1-50): ");
 
     for (int i = 0; i < trackCount; i++) {
         Song s;
-        cout << "\nTrack " << (i + 1) << ":\n";
-        s.title = promptRequiredField("  Title");
+        cout << "\nTrack " << (i + 1) << ":" << endl;
+        s.title = promptRequiredField("Title");
         s.artist = newAlbum.albumArtist;
         s.release.albumName = newAlbum.albumName;
-        s.genre = promptRequiredField("  Genre");
         s.release.releaseYear = newAlbum.releaseYear;
+        s.genre = chooseGenre();
         s.duration = promptDuration();
         newAlbum.tracklist.push_back(s);
     }
@@ -942,7 +910,28 @@ void printMenu() {
     printBoxDivider('=');
 }
 
-//Play a Song flow
+void waitBackToMenu() {
+    promptValidatedChoice(1, 1, "\n  [1] Back to Main Menu\n  >> Enter your choice: ");
+}
+
+void addSongMenu(Song catalog[], int &songCount, GenreTree &genreTree) {
+    bool keepAdding = true;
+
+    while (keepAdding) {
+        addSong(catalog, songCount);
+        if (songCount > 0) {
+            genreTree.insertGenre(catalog[songCount - 1]);
+        }
+
+        cout << "\n  [1] Add Another Song\n  [2] Back to Main Menu\n";
+        int choice = promptValidatedChoice(1, 2, "  >> Enter your choice (1-2): ");
+        if (choice == 2) {
+            keepAdding = false;
+        }
+    }
+}
+
+//play song
 void playSongMenu(Song catalog[], int songCount, PlayedHistoryStack &historyStack) {
     if (songCount == 0) {
         cout << "\nCatalog is empty. Add a song first." << endl;
@@ -953,28 +942,22 @@ void playSongMenu(Song catalog[], int songCount, PlayedHistoryStack &historyStac
 
     while (keepPlaying) {
         cout << "\n--- Available Songs ---" << endl;
+        cout << "  [1] Back to Main Menu" << endl;
         for (int i = 0; i < songCount; i++) {
-            cout << "  " << catalog[i].title
+            cout << "  [" << (i + 2) << "] " << catalog[i].title
                  << " - " << catalog[i].artist << endl;
         }
 
-        string playTitle;
-        cout << "\nEnter the title of the song to play: ";
-        getline(cin, playTitle);
+        int pick = promptValidatedChoice(1, songCount + 1, "\nEnter your choice: ");
+        if (pick == 1) {
+            keepPlaying = false;
+            break;
+        }
 
-        bool played = false;
-        for (int i = 0; i < songCount; i++) {
-            if (catalog[i].title == playTitle) {
-                historyStack.pushPlayed(catalog[i]);
-                cout << "Now playing: " << catalog[i].title
-                     << " by " << catalog[i].artist << endl;
-                played = true;
-                break;
-            }
-        }
-        if (!played) {
-            cout << "Song not found in catalog." << endl;
-        }
+        int songIndex = pick - 2;
+        historyStack.pushPlayed(catalog[songIndex]);
+        cout << "Now playing: " << catalog[songIndex].title
+             << " by " << catalog[songIndex].artist << endl;
 
         cout << "\n  [1] Play Another Song\n  [2] Return to Main Menu\n";
         int subChoice = promptValidatedChoice(1, 2, "  >> Enter your choice (1-2): ");
@@ -1021,26 +1004,27 @@ int main() {
 
         switch (choice) {
             case 1: {
-                addSong(catalog, songCount);
-                if (songCount > 0) {
-                    genreTree.insertGenre(catalog[songCount - 1]);
-                }
+                addSongMenu(catalog, songCount, genreTree);
                 break;
             }
             case 2:
                 displayAllSongs(catalog, songCount);
+                waitBackToMenu();
                 break;
             case 3:
                 selectionSortByDuration(catalog, songCount);
+                waitBackToMenu();
                 break;
             case 4:
                 searchSongByTitle(catalog, songCount);
+                waitBackToMenu();
                 break;
             case 5: {
                 cout << "\n(Sorting catalog alphabetically by title first, "
                         "as required for binary search...)" << endl;
                 selectionSortByTitle(catalog, songCount);
                 binarySearchByTitle(catalog, songCount);
+                waitBackToMenu();
                 break;
             }
             case 6: {
@@ -1049,22 +1033,27 @@ int main() {
             }
             case 7:
                 historyStack.displayRecentlyPlayed();
+                waitBackToMenu();
                 break;
             case 8: {
                 Song skipped = historyStack.popPlayed();
                 if (!skipped.title.empty()) {
                     cout << "Skipped back from: " << skipped.title << endl;
                 }
+                waitBackToMenu();
                 break;
             }
             case 9:
                 genreTree.inOrderDisplay();
+                waitBackToMenu();
                 break;
             case 10:
                 addAlbum(musicCatalog);
+                waitBackToMenu();
                 break;
             case 11:
                 displayAlbums(musicCatalog);
+                waitBackToMenu();
                 break;
             case 12:
                 cout << "Saving and exiting the program. Goodbye!" << endl;
